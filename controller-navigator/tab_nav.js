@@ -4,6 +4,7 @@ class ControllerNavigator {
     this.gamepads = {};
     this.previousButtonStates = {};
     this.previousAnalogStates = {};
+    this.previousDPadStates = {};
     this.isPolling = false;
     
     // Button mappings (standard gamepad layout)
@@ -27,6 +28,19 @@ class ControllerNavigator {
       16: 'Home'        // Home/Guide button (if available)
     };
     
+    // Default action mappings - can be overridden by user settings
+    this.actionMappings = {
+      0: 'enter',       // A button - Enter/Click
+      1: 'escape',      // B button - Escape/Back
+      4: 'shift-tab',   // LB button - Shift+Tab
+      5: 'tab',         // RB button - Tab
+      12: 'arrow-up',   // D-pad Up
+      13: 'arrow-down', // D-pad Down
+      14: 'arrow-left', // D-pad Left
+      15: 'arrow-right' // D-pad Right
+    };
+    
+    this.loadUserSettings();
     this.init();
   }
   
@@ -41,6 +55,17 @@ class ControllerNavigator {
     window.addEventListener('gamepadconnected', this.onGamepadConnected.bind(this));
     window.addEventListener('gamepaddisconnected', this.onGamepadDisconnected.bind(this));
     
+    // Listen for settings updates from popup
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === 'updateMappings') {
+        this.actionMappings = request.mappings;
+        this.saveUserSettings();
+        sendResponse({ success: true });
+      } else if (request.action === 'getMappings') {
+        sendResponse({ mappings: this.actionMappings, buttonMap: this.buttonMap });
+      }
+    });
+    
     // Start polling for existing gamepads
     this.startPolling();
     
@@ -50,10 +75,14 @@ class ControllerNavigator {
   onGamepadConnected(event) {
     const gamepad = event.gamepad;
     console.log(`Gamepad connected: ${gamepad.id} (${gamepad.index})`);
+    console.log(`Buttons: ${gamepad.buttons.length}, Axes: ${gamepad.axes.length}`);
     this.gamepads[gamepad.index] = gamepad;
     this.previousButtonStates[gamepad.index] = [];
     this.previousAnalogStates[gamepad.index] = {
       leftX: 0, leftY: 0, rightX: 0, rightY: 0
+    };
+    this.previousDPadStates[gamepad.index] = {
+      up: false, down: false, left: false, right: false
     };
   }
   
@@ -63,6 +92,7 @@ class ControllerNavigator {
     delete this.gamepads[gamepad.index];
     delete this.previousButtonStates[gamepad.index];
     delete this.previousAnalogStates[gamepad.index];
+    delete this.previousDPadStates[gamepad.index];
   }
   
   startPolling() {
@@ -105,6 +135,11 @@ class ControllerNavigator {
         leftX: 0, leftY: 0, rightX: 0, rightY: 0
       };
     }
+    if (!this.previousDPadStates[index]) {
+      this.previousDPadStates[index] = {
+        up: false, down: false, left: false, right: false
+      };
+    }
     
     // Check each button
     for (let buttonIndex = 0; buttonIndex < gamepad.buttons.length; buttonIndex++) {
@@ -126,6 +161,9 @@ class ControllerNavigator {
       this.previousButtonStates[index][buttonIndex] = currentState;
     }
     
+    // Process D-pad (both button and axes methods)
+    this.processDPad(gamepad);
+    
     // Process analog sticks
     this.processAnalogSticks(gamepad);
   }
@@ -134,35 +172,14 @@ class ControllerNavigator {
     const buttonName = this.buttonMap[buttonIndex] || `Button${buttonIndex}`;
     console.log(`Button pressed: ${buttonName} (${buttonIndex}) on gamepad ${gamepad.index}`);
     
-    // Handle specific button actions
-    switch (buttonIndex) {
-      case 0: // A button - simulate Enter/Click
-        this.simulateEnterKey();
-        break;
-      case 1: // B button - simulate Escape/Back
-        this.simulateEscapeKey();
-        break;
-      case 4: // LB button - simulate Shift+Tab for reverse accessibility navigation
-        this.simulateShiftTabKey();
-        break;
-      case 5: // RB button - simulate Tab for accessibility navigation
-        this.simulateTabKey();
-        break;
-      case 12: // D-pad Up - navigate up
-        this.navigateUp();
-        break;
-      case 13: // D-pad Down - navigate down
-        this.navigateDown();
-        break;
-      case 14: // D-pad Left - navigate left
-        this.navigateLeft();
-        break;
-      case 15: // D-pad Right - navigate right
-        this.navigateRight();
-        break;
-      default:
-        // Custom handler for other buttons
-        this.handleCustomButton(buttonName, buttonIndex, gamepad);
+    // Get the action assigned to this button
+    const action = this.actionMappings[buttonIndex];
+    
+    if (action) {
+      this.executeAction(action);
+    } else {
+      // Custom handler for unmapped buttons
+      this.handleCustomButton(buttonName, buttonIndex, gamepad);
     }
     
     // Dispatch custom event
@@ -170,6 +187,7 @@ class ControllerNavigator {
       gamepad: gamepad,
       button: buttonIndex,
       buttonName: buttonName,
+      action: action,
       value: button.value
     });
   }
@@ -234,10 +252,184 @@ class ControllerNavigator {
     }
   }
   
+  // Process D-pad input (supports both button and axes methods)
+  processDPad(gamepad) {
+    const index = gamepad.index;
+    const prevDPad = this.previousDPadStates[index];
+    
+    let dpadUp = false, dpadDown = false, dpadLeft = false, dpadRight = false;
+    
+    // Method 1: Check standard D-pad button indices (12-15)
+    if (gamepad.buttons.length > 15) {
+      dpadUp = gamepad.buttons[12] && gamepad.buttons[12].pressed;
+      dpadDown = gamepad.buttons[13] && gamepad.buttons[13].pressed;
+      dpadLeft = gamepad.buttons[14] && gamepad.buttons[14].pressed;
+      dpadRight = gamepad.buttons[15] && gamepad.buttons[15].pressed;
+    }
+    
+    // Method 2: Check D-pad axes (usually axes 6 and 7 on some controllers)
+    if (!dpadUp && !dpadDown && !dpadLeft && !dpadRight && gamepad.axes.length >= 8) {
+      const dpadXAxis = gamepad.axes[6];
+      const dpadYAxis = gamepad.axes[7];
+      
+      if (dpadXAxis !== undefined && dpadYAxis !== undefined) {
+        dpadLeft = dpadXAxis < -0.5;
+        dpadRight = dpadXAxis > 0.5;
+        dpadUp = dpadYAxis < -0.5;
+        dpadDown = dpadYAxis > 0.5;
+      }
+    }
+    
+    // Method 3: Alternative axes positions (some controllers use different indices)
+    if (!dpadUp && !dpadDown && !dpadLeft && !dpadRight && gamepad.axes.length >= 10) {
+      const dpadXAxis = gamepad.axes[8];
+      const dpadYAxis = gamepad.axes[9];
+      
+      if (dpadXAxis !== undefined && dpadYAxis !== undefined) {
+        dpadLeft = dpadXAxis < -0.5;
+        dpadRight = dpadXAxis > 0.5;
+        dpadUp = dpadYAxis < -0.5;
+        dpadDown = dpadYAxis > 0.5;
+      }
+    }
+    
+    // Debug logging for D-pad detection
+    if (dpadUp || dpadDown || dpadLeft || dpadRight) {
+      console.log(`D-pad detected: Up:${dpadUp}, Down:${dpadDown}, Left:${dpadLeft}, Right:${dpadRight}`);
+    }
+    
+    // Handle D-pad presses (only trigger on new press, not hold)
+    if (dpadUp && !prevDPad.up) {
+      console.log('D-pad Up pressed');
+      this.onDPadPressed('up');
+    }
+    if (dpadDown && !prevDPad.down) {
+      console.log('D-pad Down pressed');
+      this.onDPadPressed('down');
+    }
+    if (dpadLeft && !prevDPad.left) {
+      console.log('D-pad Left pressed');
+      this.onDPadPressed('left');
+    }
+    if (dpadRight && !prevDPad.right) {
+      console.log('D-pad Right pressed');
+      this.onDPadPressed('right');
+    }
+    
+    // Update previous states
+    prevDPad.up = dpadUp;
+    prevDPad.down = dpadDown;
+    prevDPad.left = dpadLeft;
+    prevDPad.right = dpadRight;
+  }
+  
+  // Handle D-pad press events
+  onDPadPressed(direction) {
+    const directionToButton = {
+      'up': 12,
+      'down': 13,
+      'left': 14,
+      'right': 15
+    };
+    
+    const buttonIndex = directionToButton[direction];
+    const action = this.actionMappings[buttonIndex];
+    
+    if (action) {
+      console.log(`Executing D-pad ${direction} action: ${action}`);
+      this.executeAction(action);
+    } else {
+      console.log(`No action mapped for D-pad ${direction}`);
+    }
+    
+    // Dispatch custom event
+    this.dispatchControllerEvent('dpadpress', {
+      direction: direction,
+      button: buttonIndex,
+      action: action
+    });
+  }
+  
   handleAnalogNavigation(x, y, stickName) {
     // Implement analog stick navigation logic here
     // This could be used for smooth scrolling or cursor movement
     console.log(`${stickName} movement: X=${x.toFixed(2)}, Y=${y.toFixed(2)}`);
+  }
+  
+  // Execute action based on user mapping
+  executeAction(action) {
+    switch (action) {
+      case 'enter':
+        this.simulateEnterKey();
+        break;
+      case 'escape':
+        this.simulateEscapeKey();
+        break;
+      case 'tab':
+        this.simulateTabKey();
+        break;
+      case 'shift-tab':
+        this.simulateShiftTabKey();
+        break;
+      case 'arrow-up':
+        this.navigateUp();
+        break;
+      case 'arrow-down':
+        this.navigateDown();
+        break;
+      case 'arrow-left':
+        this.navigateLeft();
+        break;
+      case 'arrow-right':
+        this.navigateRight();
+        break;
+      case 'space':
+        this.dispatchKeyEvent('Space', 32);
+        break;
+      case 'backspace':
+        this.dispatchKeyEvent('Backspace', 8);
+        break;
+      case 'delete':
+        this.dispatchKeyEvent('Delete', 46);
+        break;
+      case 'home':
+        this.dispatchKeyEvent('Home', 36);
+        break;
+      case 'end':
+        this.dispatchKeyEvent('End', 35);
+        break;
+      case 'page-up':
+        this.dispatchKeyEvent('PageUp', 33);
+        break;
+      case 'page-down':
+        this.dispatchKeyEvent('PageDown', 34);
+        break;
+      case 'none':
+        // Do nothing
+        break;
+      default:
+        console.log(`Unknown action: ${action}`);
+    }
+  }
+  
+  // Settings management
+  loadUserSettings() {
+    try {
+      const saved = localStorage.getItem('controllerNavigatorMappings');
+      if (saved) {
+        this.actionMappings = { ...this.actionMappings, ...JSON.parse(saved) };
+      }
+    } catch (error) {
+      console.warn('Failed to load user settings:', error);
+    }
+  }
+  
+  saveUserSettings() {
+    try {
+      localStorage.setItem('controllerNavigatorMappings', JSON.stringify(this.actionMappings));
+    } catch (error) {
+      console.warn('Failed to save user settings:', error);
+    }
   }
   
   // Navigation methods

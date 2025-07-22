@@ -43,11 +43,25 @@
     .button-name {
       font-weight: 500;
       color: #333;
+      min-width: 80px;
     }
     
     .button-action {
       color: #666;
       font-size: 14px;
+    }
+    
+    .action-select {
+      padding: 4px 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: white;
+      font-size: 12px;
+      min-width: 120px;
+    }
+    
+    .save-button:hover {
+      opacity: 0.9;
     }
     
     .status {
@@ -78,32 +92,15 @@
       </div>
     </div>
     
-    <div class="section">
+    <div class="section" id="mappings-section">
       <h3>Button Mappings:</h3>
-      <div class="button-mapping">
-        <span class="button-name">A Button</span>
-        <span class="button-action">Enter/Click</span>
-      </div>
-      <div class="button-mapping">
-        <span class="button-name">B Button</span>
-        <span class="button-action">Escape/Back</span>
-      </div>
-      <div class="button-mapping">
-        <span class="button-name">LB (L1)</span>
-        <span class="button-action">Shift+Tab</span>
-      </div>
-      <div class="button-mapping">
-        <span class="button-name">RB (R1)</span>
-        <span class="button-action">Tab</span>
-      </div>
-      <div class="button-mapping">
-        <span class="button-name">D-Pad</span>
-        <span class="button-action">Arrow Keys</span>
+      <div id="loading-mappings" style="text-align: center; color: #666; font-style: italic;">
+        Loading button mappings...
       </div>
     </div>
     
     <div class="note">
-      Future: Button rebinding support for custom navigation
+      Customize button actions using the dropdowns above
     </div>
   </div>
   
