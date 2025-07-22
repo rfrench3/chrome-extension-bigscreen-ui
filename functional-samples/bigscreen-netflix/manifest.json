@@ -1,6 +1,6 @@
 {
-  "name": "Hello Extensions",
-  "description": "Base Level Extension",
+  "name": "bigscreen for Netflix",
+  "description": "Optimize the Netflix interface for controller use",
   "version": "1.0",
   "manifest_version": 3,
   "action": {
