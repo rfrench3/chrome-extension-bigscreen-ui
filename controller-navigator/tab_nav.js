@@ -118,42 +118,43 @@ class ControllerNavigator {
           leftX: 0, leftY: 1,
           rightX: 2, rightY: 3,
           leftTrigger: null, rightTrigger: null
+        },
+        buttonMap: {
+          0: 'A',           // A button (bottom face button)
+          1: 'B',           // B button (right face button)
+          2: 'X',           // X button (left face button)
+          3: 'Y',           // Y button (top face button)
+          4: 'LB',          // Left bumper
+          5: 'RB',          // Right bumper
+          6: 'LT',          // Left trigger
+          7: 'RT',          // Right trigger
+          8: 'Back',        // Back/Select button
+          9: 'Start',       // Start/Menu button
+          10: 'LS',         // Left stick button
+          11: 'RS',         // Right stick button
+          12: 'DPadUp',     // D-pad up
+          13: 'DPadDown',   // D-pad down
+          14: 'DPadLeft',   // D-pad left
+          15: 'DPadRight',  // D-pad right
+          16: 'Home'        // Home/Guide button (if available)
+        },
+        actionMappings: {
+          0: 'enter',       // A button - Enter/Click
+          1: 'escape',      // B button - Escape/Back
+          4: 'shift-tab',   // LB button - Shift+Tab
+          5: 'tab',         // RB button - Tab
+          12: 'arrow-up',   // D-pad Up
+          13: 'arrow-down', // D-pad Down
+          14: 'arrow-left', // D-pad Left
+          15: 'arrow-right' // D-pad Right
         }
       }
     };
     
-    // Button mappings (standard gamepad layout)
-    this.buttonMap = {
-      0: 'A',           // A button (bottom face button)
-      1: 'B',           // B button (right face button)
-      2: 'X',           // X button (left face button)
-      3: 'Y',           // Y button (top face button)
-      4: 'LB',          // Left bumper
-      5: 'RB',          // Right bumper
-      6: 'LT',          // Left trigger
-      7: 'RT',          // Right trigger
-      8: 'Back',        // Back/Select button
-      9: 'Start',       // Start/Menu button
-      10: 'LS',         // Left stick button
-      11: 'RS',         // Right stick button
-      12: 'DPadUp',     // D-pad up
-      13: 'DPadDown',   // D-pad down
-      14: 'DPadLeft',   // D-pad left
-      15: 'DPadRight',  // D-pad right
-      16: 'Home'        // Home/Guide button (if available)
-    };
-    
-    // Default action mappings - can be overridden by user settings
-    this.actionMappings = {
-      0: 'enter',       // A button - Enter/Click
-      1: 'escape',      // B button - Escape/Back
-      4: 'shift-tab',   // LB button - Shift+Tab
-      5: 'tab',         // RB button - Tab
-      12: 'arrow-up',   // D-pad Up
-      13: 'arrow-down', // D-pad Down
-      14: 'arrow-left', // D-pad Left
-      15: 'arrow-right' // D-pad Right
-    };
+    // Initialize with default profile settings
+    const defaultProfile = this.controllerProfiles.default;
+    this.buttonMap = defaultProfile.buttonMap;
+    this.actionMappings = defaultProfile.actionMappings;
     
     this.loadUserSettings();
     this.init();
@@ -177,21 +178,25 @@ class ControllerNavigator {
         this.saveUserSettings();
         sendResponse({ success: true });
       } else if (request.action === 'getMappings') {
-        // Get current controller's button map if available
+        // Get current controller's button map and action mappings if available
         const gamepads = navigator.getGamepads();
         let buttonMap = this.buttonMap;
+        let actionMappings = this.actionMappings;
         
         for (let gamepad of gamepads) {
           if (gamepad) {
             const profile = this.getControllerProfile(gamepad);
             if (profile.buttonMap) {
               buttonMap = profile.buttonMap;
-              break;
             }
+            if (profile.actionMappings) {
+              actionMappings = { ...profile.actionMappings, ...this.actionMappings };
+            }
+            break;
           }
         }
         
-        sendResponse({ mappings: this.actionMappings, buttonMap: buttonMap });
+        sendResponse({ mappings: actionMappings, buttonMap: buttonMap });
       }
     });
     
@@ -204,7 +209,6 @@ class ControllerNavigator {
   onGamepadConnected(event) {
     const gamepad = event.gamepad;
     console.log(`Gamepad connected: ${gamepad.id} (${gamepad.index})`);
-    console.log(`Buttons: ${gamepad.buttons.length}, Axes: ${gamepad.axes.length}`);
     this.gamepads[gamepad.index] = gamepad;
     this.previousButtonStates[gamepad.index] = [];
     this.previousAnalogStates[gamepad.index] = {
@@ -364,12 +368,23 @@ class ControllerNavigator {
     const rightX = gamepad.axes[axesMap.rightX] || 0;
     const rightY = gamepad.axes[axesMap.rightY] || 0;
     
+    // Get trigger values if they exist as axes
+    const leftTrigger = (axesMap.leftTrigger !== null) ? gamepad.axes[axesMap.leftTrigger] || 0 : 0;
+    const rightTrigger = (axesMap.rightTrigger !== null) ? gamepad.axes[axesMap.rightTrigger] || 0 : 0;
+    
     // Get previous states
     const prevState = this.previousAnalogStates[index];
+    
+    // Initialize trigger states if not exists
+    if (!prevState.hasOwnProperty('leftTrigger')) {
+      prevState.leftTrigger = 0;
+      prevState.rightTrigger = 0;
+    }
     
     // Dead zone threshold
     const deadZone = 0.1;
     const changeThreshold = 0.05; // Only log if change is significant
+    const triggerThreshold = 0.5; // Threshold for trigger press detection
     
     // Check for significant changes in left stick
     if (Math.abs(leftX - prevState.leftX) > changeThreshold || 
@@ -397,6 +412,45 @@ class ControllerNavigator {
       // Update previous state
       prevState.rightX = rightX;
       prevState.rightY = rightY;
+    }
+    
+    // Process analog triggers if they exist
+    if (axesMap.leftTrigger !== null) {
+      const leftTriggerPressed = leftTrigger > triggerThreshold;
+      const prevLeftTriggerPressed = prevState.leftTrigger > triggerThreshold;
+      
+      // Detect left trigger press
+      if (leftTriggerPressed && !prevLeftTriggerPressed) {
+        console.log(`Left Trigger pressed (analog): ${leftTrigger.toFixed(2)}`);
+        this.onAnalogTriggerPressed('left', 6, leftTrigger); // Use button index 6 for LT
+      }
+      
+      // Detect left trigger release
+      if (!leftTriggerPressed && prevLeftTriggerPressed) {
+        console.log(`Left Trigger released (analog): ${leftTrigger.toFixed(2)}`);
+        this.onAnalogTriggerReleased('left', 6, leftTrigger);
+      }
+      
+      prevState.leftTrigger = leftTrigger;
+    }
+    
+    if (axesMap.rightTrigger !== null) {
+      const rightTriggerPressed = rightTrigger > triggerThreshold;
+      const prevRightTriggerPressed = prevState.rightTrigger > triggerThreshold;
+      
+      // Detect right trigger press
+      if (rightTriggerPressed && !prevRightTriggerPressed) {
+        console.log(`Right Trigger pressed (analog): ${rightTrigger.toFixed(2)}`);
+        this.onAnalogTriggerPressed('right', 7, rightTrigger); // Use button index 7 for RT
+      }
+      
+      // Detect right trigger release
+      if (!rightTriggerPressed && prevRightTriggerPressed) {
+        console.log(`Right Trigger released (analog): ${rightTrigger.toFixed(2)}`);
+        this.onAnalogTriggerReleased('right', 7, rightTrigger);
+      }
+      
+      prevState.rightTrigger = rightTrigger;
     }
   }
   
@@ -504,6 +558,45 @@ class ControllerNavigator {
     console.log(`${stickName} movement: X=${x.toFixed(2)}, Y=${y.toFixed(2)}`);
   }
   
+  // Handle analog trigger press events
+  onAnalogTriggerPressed(side, buttonIndex, value) {
+    const buttonName = side === 'left' ? 'LT' : 'RT';
+    console.log(`Analog trigger pressed: ${buttonName} (${buttonIndex}) value: ${value.toFixed(2)}`);
+    
+    // Get the action assigned to this trigger button
+    const action = this.actionMappings[buttonIndex];
+    
+    if (action) {
+      this.executeAction(action);
+    } else {
+      // Custom handler for unmapped triggers
+      this.handleCustomButton(buttonName, buttonIndex, null);
+    }
+    
+    // Dispatch custom event
+    this.dispatchControllerEvent('triggerpress', {
+      side: side,
+      button: buttonIndex,
+      buttonName: buttonName,
+      action: action,
+      value: value
+    });
+  }
+  
+  // Handle analog trigger release events
+  onAnalogTriggerReleased(side, buttonIndex, value) {
+    const buttonName = side === 'left' ? 'LT' : 'RT';
+    console.log(`Analog trigger released: ${buttonName} (${buttonIndex}) value: ${value.toFixed(2)}`);
+    
+    // Dispatch custom event
+    this.dispatchControllerEvent('triggerrelease', {
+      side: side,
+      button: buttonIndex,
+      buttonName: buttonName,
+      value: value
+    });
+  }
+  
   // Execute action based on user mapping
   executeAction(action) {
     switch (action) {
@@ -551,6 +644,10 @@ class ControllerNavigator {
         break;
       case 'page-down':
         this.dispatchKeyEvent('PageDown', 34);
+        break;
+      case 'close-app':
+        // Close current tab/window (perfect for web apps)
+        window.close();
         break;
       case 'none':
         // Do nothing
