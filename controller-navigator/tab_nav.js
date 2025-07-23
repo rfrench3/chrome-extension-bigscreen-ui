@@ -14,6 +14,25 @@ class ControllerNavigator {
           leftX: 0, leftY: 1,
           rightX: 3, rightY: 4,  // Skip axis 2 (left trigger)
           leftTrigger: 2, rightTrigger: 5
+        },
+        buttonMap: {
+          0: 'A',           
+          1: 'B',           
+          2: 'X',           
+          3: 'Y',           
+          4: 'LB',          
+          5: 'RB',          
+          6: 'Select',          
+          7: 'Start',          
+          8: 'Home',      
+          9: 'LS',       
+          10: 'RS',         
+          11: '',         
+          12: 'DPadUp',     
+          13: 'DPadDown',   
+          14: 'DPadLeft',   
+          15: 'DPadRight',  
+          16: ''        
         }
       },
       '8BitDo SN30 Pro': {
@@ -158,7 +177,21 @@ class ControllerNavigator {
         this.saveUserSettings();
         sendResponse({ success: true });
       } else if (request.action === 'getMappings') {
-        sendResponse({ mappings: this.actionMappings, buttonMap: this.buttonMap });
+        // Get current controller's button map if available
+        const gamepads = navigator.getGamepads();
+        let buttonMap = this.buttonMap;
+        
+        for (let gamepad of gamepads) {
+          if (gamepad) {
+            const profile = this.getControllerProfile(gamepad);
+            if (profile.buttonMap) {
+              buttonMap = profile.buttonMap;
+              break;
+            }
+          }
+        }
+        
+        sendResponse({ mappings: this.actionMappings, buttonMap: buttonMap });
       }
     });
     
@@ -276,8 +309,12 @@ class ControllerNavigator {
   }
   
   onButtonPressed(gamepad, buttonIndex, button) {
-    const buttonName = this.buttonMap[buttonIndex] || `Button${buttonIndex}`;
-    console.log(`Button pressed: ${buttonName} (${buttonIndex}) on gamepad ${gamepad.index}`);
+    // Use controller-specific button mapping if available
+    const profile = this.getControllerProfile(gamepad);
+    const buttonMap = profile.buttonMap || this.buttonMap;
+    const buttonName = buttonMap[buttonIndex] || `Button${buttonIndex}`;
+    
+    console.log(`Button pressed: ${buttonName} (${buttonIndex}) on gamepad ${gamepad.index} (${gamepad.id})`);
     
     // Get the action assigned to this button
     const action = this.actionMappings[buttonIndex];
@@ -300,8 +337,12 @@ class ControllerNavigator {
   }
   
   onButtonReleased(gamepad, buttonIndex, button) {
-    const buttonName = this.buttonMap[buttonIndex] || `Button${buttonIndex}`;
-    console.log(`Button released: ${buttonName} (${buttonIndex}) on gamepad ${gamepad.index}`);
+    // Use controller-specific button mapping if available
+    const profile = this.getControllerProfile(gamepad);
+    const buttonMap = profile.buttonMap || this.buttonMap;
+    const buttonName = buttonMap[buttonIndex] || `Button${buttonIndex}`;
+    
+    console.log(`Button released: ${buttonName} (${buttonIndex}) on gamepad ${gamepad.index} (${gamepad.id})`);
     
     // Dispatch custom event
     this.dispatchControllerEvent('buttonrelease', {
