@@ -7,6 +7,102 @@ class ControllerNavigator {
     this.previousDPadStates = {};
     this.isPolling = false;
     
+    // Controller profiles for handling mapping quirks
+    this.controllerProfiles = {
+      '8BitDo Ultimate 2C': {
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // Skip axis 2 (left trigger)
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      '8BitDo SN30 Pro': {
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // Skip axis 2 (left trigger)
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      'Xbox One Controller': {
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // Skip axis 2 (left trigger)
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      'Xbox Series X Controller': {
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // Skip axis 2 (left trigger)
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      'DualSense Controller': {
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 2, rightY: 3,  // PS5 controllers typically don't interfere
+          leftTrigger: null, rightTrigger: null
+        }
+      },
+      'DUALSHOCK 4': {
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 2, rightY: 3,  // PS4 controllers typically don't interfere
+          leftTrigger: null, rightTrigger: null
+        }
+      },
+      'Pro Controller': {  // Nintendo Switch Pro Controller
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // Skip axis 2 (left trigger)
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      'Joy-Con': {  // Nintendo Switch Joy-Con
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 2, rightY: 3,  // Joy-Con typically standard mapping
+          leftTrigger: null, rightTrigger: null
+        }
+      },
+      'PowerA': {  // PowerA third-party controllers
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // Many PowerA controllers skip axis 2
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      'PDP': {  // PDP (Performance Designed Products) controllers
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // PDP controllers often skip axis 2
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      'Razer': {  // Razer controllers (Wolverine series)
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // Skip axis 2 (left trigger)
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      'Steam Controller': {
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 3, rightY: 4,  // Steam Controller axis mapping
+          leftTrigger: 2, rightTrigger: 5
+        }
+      },
+      // Add more profiles as needed
+      default: {
+        axesMap: {
+          leftX: 0, leftY: 1,
+          rightX: 2, rightY: 3,
+          leftTrigger: null, rightTrigger: null
+        }
+      }
+    };
+    
     // Button mappings (standard gamepad layout)
     this.buttonMap = {
       0: 'A',           // A button (bottom face button)
@@ -50,7 +146,7 @@ class ControllerNavigator {
       console.warn('Gamepad API not supported in this browser');
       return;
     }
-    
+        
     // Listen for gamepad connect/disconnect events
     window.addEventListener('gamepadconnected', this.onGamepadConnected.bind(this));
     window.addEventListener('gamepaddisconnected', this.onGamepadDisconnected.bind(this));
@@ -84,6 +180,17 @@ class ControllerNavigator {
     this.previousDPadStates[gamepad.index] = {
       up: false, down: false, left: false, right: false
     };
+  }
+  
+  // Get controller profile for axes mapping
+  getControllerProfile(gamepad) {
+    // Check if we have a specific profile for this controller
+    for (const profileName in this.controllerProfiles) {
+      if (gamepad.id.includes(profileName)) {
+        return this.controllerProfiles[profileName];
+      }
+    }
+    return this.controllerProfiles.default;
   }
   
   onGamepadDisconnected(event) {
@@ -207,14 +314,14 @@ class ControllerNavigator {
   
   processAnalogSticks(gamepad) {
     const index = gamepad.index;
+    const profile = this.getControllerProfile(gamepad);
+    const axesMap = profile.axesMap;
     
-    // Left stick
-    const leftX = gamepad.axes[0] || 0;
-    const leftY = gamepad.axes[1] || 0;
-    
-    // Right stick  
-    const rightX = gamepad.axes[2] || 0;
-    const rightY = gamepad.axes[3] || 0;
+    // Get stick values using profile mapping
+    const leftX = gamepad.axes[axesMap.leftX] || 0;
+    const leftY = gamepad.axes[axesMap.leftY] || 0;
+    const rightX = gamepad.axes[axesMap.rightX] || 0;
+    const rightY = gamepad.axes[axesMap.rightY] || 0;
     
     // Get previous states
     const prevState = this.previousAnalogStates[index];
